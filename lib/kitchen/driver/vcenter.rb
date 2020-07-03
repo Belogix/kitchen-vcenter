@@ -328,7 +328,15 @@ module Kitchen
       # @param [name] name is the name of the folder
       def get_folder(name)
         folder_api = VSphereAutomation::VCenter::FolderApi.new(api_client)
-        folders = folder_api.list({ filter_names: name, filter_type: "VIRTUAL_MACHINE" }).value
+
+        # Handle sub-folders
+        if name.include? '/'
+          folder_stack = name.split('/').reject(&:empty?)
+          name = folder_stack.pop
+          folders = folder_api.list({ parent_folders: folder_stack, filter_names: name, filter_type: "VIRTUAL_MACHINE" }).value
+        else
+          folders = folder_api.list({ filter_names: name, filter_type: "VIRTUAL_MACHINE" }).value
+        end
 
         raise format("Unable to find folder: %s", name) if folders.empty?
 
