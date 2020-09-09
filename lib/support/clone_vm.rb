@@ -498,15 +498,60 @@ class Support
         )
       end
 
-      RbVmomi::VIM::CustomizationSpec.new(
-        identity: RbVmomi::VIM::CustomizationLinuxPrep.new(
+      os_customization_prep = if windows?
+        guest_customizations = options[:guest_customization]
+        unattended_password = RbVmomi::VIM::CustomizationPassword(
+          plainText: true,
+          value: guest_customizations[:unattended_password]
+        )
+        custom_gui_unattended = RbVmomi::VIM::CustomizationGuiUnattended.new(
+          autoLogon: true,
+          autoLogonCount: 1,
+          password: unattended_password,
+          timeZone: guest_customizations[:win_time_zone]
+        )
+        custom_userdata = RbVmomi::VIM::CustomizationUserData.new(
+          computerName: RbVmomi::VIM::CustomizationFixedName.new(
+            name: name
+          ),
+          fullName: guest_customizations[:org_name],
+          orgName: guest_customizations[:org_name],
+          productId: guest_customizations[:product_id]
+        )
+        if guest_customizations.key?(:dns_domain) && (guest_customizations[:dns_domain] != "local")
+          custom_domain_password = RbVmomi::VIM::CustomizationPassword(
+            plainText: true,
+            value: ENV["domainAdminPassword"] || guest_customizations[:domain_admin_password]
+          )
+          custom_id = RbVmomi::VIM::CustomizationIdentification.new(
+            joinDomain: guest_customizations[:dns_domain],
+            domainAdmin: guest_customizations[:domain_admin],
+            domainAdminPassword: custom_domain_password
+          )
+          Kitchen.logger.info format("joining domain #{guest_customizations[:dns_domain]} /
+            with user: #{guest_customizations[:domain_admin]}")
+        else
+          custom_id = RbVmomi::VIM::CustomizationIdentification.new(
+            joinWorkgroup: "WORKGROUP"
+          )
+        end
+        RbVmomi::VIM::CustomizationSysprep.new(
+          identification: custom_id,
+          guiUnattended: custom_gui_unattended,
+          userData: custom_userdata
+        )
+      else
+        RbVmomi::VIM::CustomizationLinuxPrep.new(
           domain: options[:guest_customization][:dns_domain],
           hostName: RbVmomi::VIM::CustomizationFixedName.new(
             name: name
           ),
           hwClockUTC: true,
           timeZone: options[:guest_customization][:timezone]
-        ),
+        )
+      end
+      RbVmomi::VIM::CustomizationSpec.new(
+        identity: os_customization_prep,
         globalIPSettings: RbVmomi::VIM::CustomizationGlobalIPSettings.new(
           dnsServerList: options[:guest_customization][:dns_server_list],
           dnsSuffixList: options[:guest_customization][:dns_suffix_list]
